@@ -1,0 +1,21 @@
+[Unit]
+Description=DALY BMS Home Assistant MQTT bridge
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/daly-ha.env
+ExecStart=/opt/daly-ha/bin/python /opt/daly-ha/daly_ha_bridge.py
+Restart=always
+RestartSec=5
+TimeoutStopSec=15
+User=root
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target
