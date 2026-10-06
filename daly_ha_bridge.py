@@ -101,6 +101,8 @@ def publish_discovery():
         "remaining_capacity": ("Remaining Capacity", "Ah", None, "mdi:battery-clock"),
         "cell_delta": ("Cell Delta", "V", "voltage", "mdi:delta"),
         "alarms": ("Alarms", None, None, "mdi:alert"),
+        "highest_temperature": ("Highest Temperature", "\u00b0C", "temperature", "mdi:thermometer"),
+        "lowest_temperature": ("Lowest Temperature", "\u00b0C", "temperature", "mdi:thermometer"),
     }
     for cell_number in range(1, CELL_COUNT + 1):
         sensors[f"cell_{cell_number}_voltage"] = (
@@ -130,6 +132,8 @@ def publish_discovery():
             object_id.startswith("cell_") and object_id.endswith("_voltage")
         ):
             config["suggested_display_precision"] = 3
+        if object_id in ("highest_temperature", "lowest_temperature"):
+            config["expire_after"] = 180
         if object_id != "alarms":
             config["state_class"] = "measurement"
         topic = f"{DISCOVERY_PREFIX}/sensor/daly_bms/{object_id}/config"
@@ -233,6 +237,22 @@ def read_optional(method, description):
         return None
 
 
+def publish_temperature_measurements(daly):
+    # Read-only 0x92: extrema across the BMS temperature probes, in Celsius.
+    temperatures = read_optional(daly.get_temperature_range, "temperature range")
+    if not isinstance(temperatures, dict):
+        return
+    low = temperatures.get("lowest_temperature")
+    high = temperatures.get("highest_temperature")
+    if (type(low) not in (int, float) or type(high) not in (int, float)
+            or not -40 <= low <= high <= 87):
+        LOG.warning("Invalid temperature range response; not publishing")
+        return
+    # Do not retain or cache these values: old samples must not be replayed as fresh.
+    for item, value in (("highest_temperature", high), ("lowest_temperature", low)):
+        client.publish(state_topic(item), str(value), qos=1, retain=False)
+
+
 def publish_measurements():
     daly = ensure_bms()
     # Voltage/current/SOC and MOSFET state are core health checks. A missed
@@ -265,6 +285,9 @@ def publish_measurements():
     errors = read_optional(daly.get_errors, "alarms")
     if isinstance(errors, list):
         publish_value("alarms", "; ".join(errors) if errors else "None")
+
+    time.sleep(REQUEST_GAP_SECONDS)
+    publish_temperature_measurements(daly)
 
 
 def on_message(mqtt_client, userdata, message):

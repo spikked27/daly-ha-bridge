@@ -89,3 +89,21 @@ sudo systemctl disable --now daly-ha-bridge
 
 Stopping the service does not change either MOSFET. It only stops monitoring
 and command handling.
+
+## Temperature telemetry
+
+The bridge reads the DALY temperature-range query (0x92) and discovers
+`sensor.daly_bms_highest_temperature` and `sensor.daly_bms_lowest_temperature`.
+They report extrema across the BMS temperature probes, in degrees Celsius;
+Home Assistant may display them in the user-selected temperature unit.
+
+These optional readings are not retained or replayed from the state cache.
+Home Assistant marks them unavailable after 180 seconds without a fresh sample.
+A missing or malformed temperature response does not take core battery telemetry
+offline. No charge/discharge control behavior is changed.
+
+Run isolated tests without MQTT or serial hardware:
+
+```bash
+python3 -m unittest -v tests.test_temperature
+```
